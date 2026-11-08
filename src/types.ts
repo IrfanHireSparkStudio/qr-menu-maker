@@ -2,7 +2,8 @@ import type { Context, Hono } from 'hono';
 
 export interface Env {
   DB: D1Database;
-  MENU_PHOTOS: R2Bucket;
+  /** Workers KV namespace holding menu photos (binary values, content-type in metadata). */
+  MENU_PHOTOS: KVNamespace;
   /** One-time token protecting the first-admin setup page. Set via `wrangler secret put`. */
   SETUP_TOKEN: string;
   /** Public Turnstile site key (not a secret). May be empty = Turnstile disabled. */

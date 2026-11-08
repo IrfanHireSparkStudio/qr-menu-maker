@@ -7,6 +7,7 @@
  */
 
 import type { App } from './types';
+import type { PhotoMetadata } from './upload';
 import { getCategories, getItemsWithPrices, getRestaurantBySlug } from './db';
 import { qrSvgForUrl } from './qr';
 import { langFromRequest, t, type Lang } from './i18n';
@@ -130,17 +131,31 @@ ${r.plan === 'free' ? `<footer class="powered">${esc(t(lang, 'poweredBy'))}</foo
     });
   });
 
-  // ---- Photos from R2 (same-origin, so the CSP stays tight) ----
+  // ---- Photos from Workers KV (same-origin, so the CSP stays tight) ----
+  // KV reads are eventually consistent: a photo uploaded a moment ago
+  // can take a few seconds to appear on every edge.
   app.get('/photos/*', async (c) => {
     const key = c.req.path.replace(/^\/photos\//, '');
     if (!key.startsWith('restaurants/') || key.includes('..')) {
       return c.text('Not found.', 404);
     }
-    const obj = await c.env.MENU_PHOTOS.get(decodeURIComponent(key));
-    if (!obj) return c.text('Not found.', 404);
+    const result = await c.env.MENU_PHOTOS.getWithMetadata<PhotoMetadata>(
+      decodeURIComponent(key),
+      'arrayBuffer',
+    );
+    if (!result.value) return c.text('Not found.', 404);
     const headers = new Headers();
-    headers.set('Content-Type', obj.httpMetadata?.contentType ?? 'application/octet-stream');
+    headers.set('Content-Type', contentTypeFor(key, result.metadata?.contentType));
     headers.set('Cache-Control', 'public, max-age=86400');
-    return new Response(obj.body, { headers });
+    return new Response(result.value, { headers });
   });
+}
+
+/** Content-type for a stored photo: KV metadata first, extension as fallback. */
+function contentTypeFor(key: string, stored?: string): string {
+  if (stored) return stored;
+  if (key.endsWith('.jpg') || key.endsWith('.jpeg')) return 'image/jpeg';
+  if (key.endsWith('.png')) return 'image/png';
+  if (key.endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
 }

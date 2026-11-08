@@ -1,9 +1,14 @@
 /**
- * Photo uploads to R2 (item photos, restaurant logos).
+ * Photo uploads to Workers KV (item photos, restaurant logos).
+ *
+ * Photos are stored as binary KV values; the upload content-type is kept
+ * in the KV metadata so the serve route can return it. (KV was chosen
+ * over R2 because R2 activation needs a payment method + billing address;
+ * if R2 billing is activated later, photos can move back to R2.)
  *
  * Rules from the spec:
  * - JPG / WebP / PNG only. SVG is never accepted (it can carry scripts).
- * - Server-side size limit: 2 MB per photo.
+ * - Server-side size limit: 2 MB per photo (well under KV's 25 MB value limit).
  * - Files are stored under restaurants/<restaurant_id>/... and served
  *   same-origin through /photos/:key, so the CSP stays tight.
  */
@@ -22,8 +27,13 @@ export interface UploadResult {
   error?: string;
 }
 
+/** Metadata stored with each photo KV value. */
+export interface PhotoMetadata {
+  contentType: string;
+}
+
 export async function handlePhotoUpload(
-  bucket: R2Bucket,
+  kv: KVNamespace,
   file: File | null,
   keyPrefix: string,
 ): Promise<UploadResult> {
@@ -36,15 +46,15 @@ export async function handlePhotoUpload(
     .join('');
   const key = `${keyPrefix}-${random}.${ext}`;
   const buf = await file.arrayBuffer();
-  await bucket.put(key, buf, { httpMetadata: { contentType: file.type } });
+  await kv.put(key, buf, { metadata: { contentType: file.type } satisfies PhotoMetadata });
   return { ok: true, path: `/photos/${encodeURIComponent(key).replace(/%2F/g, '/')}` };
 }
 
-/** Delete an R2 object for a stored /photos/... path (best effort, errors ignored). */
-export async function deletePhoto(bucket: R2Bucket, photoPath: string | null): Promise<void> {
+/** Delete a KV photo for a stored /photos/... path (best effort, errors ignored). */
+export async function deletePhoto(kv: KVNamespace, photoPath: string | null): Promise<void> {
   if (!photoPath || !photoPath.startsWith('/photos/')) return;
   try {
-    await bucket.delete(decodeURIComponent(photoPath.slice('/photos/'.length)));
+    await kv.delete(decodeURIComponent(photoPath.slice('/photos/'.length)));
   } catch {
     // best effort only
   }
