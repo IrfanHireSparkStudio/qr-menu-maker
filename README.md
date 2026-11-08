@@ -7,7 +7,7 @@ phone to see the menu; the menu can change without the QR changing.
 
 Stack (as in the video spec): Cloudflare Workers (not Pages), TypeScript,
 Hono, server-rendered HTML (not a React app, so pages stay light),
-Cloudflare D1 database, R2 bucket for photos.
+Cloudflare D1 database, Workers KV namespace for photos.
 
 ## What V1 includes
 
@@ -65,20 +65,28 @@ npm install
 npx wrangler login
 ```
 
-### 4. Create the D1 database and paste its ID into wrangler.toml
+### 4. D1 database (already created)
 
-```bash
-npx wrangler d1 create qr-menu-maker-db
-```
+The D1 database `qr-menu-maker-db` is already created and its
+`database_id` (`e36f9cdf-af11-4580-ba70-fba4a0bf6988`) is already in
+`wrangler.toml`; nothing to do here. For reference, the create command
+was `npx wrangler d1 create qr-menu-maker-db`.
 
-Copy the `database_id` from the output into `wrangler.toml`, replacing
-`REPLACE_WITH_YOUR_D1_DATABASE_ID`.
+### 5. Photos use Workers KV (already created)
 
-### 5. Create the R2 bucket for photos
+Menu photos (item photos, restaurant logos) are stored in a Workers KV
+namespace, not R2 — R2 activation needs a payment method + billing
+address, while KV works on the free plan. The namespace
+`qr-menu-maker-photos` (ID `e395a45b8f07457a9ae710f3f56a5d21`) is already
+created and bound in `wrangler.toml`; nothing to do here. If R2 billing
+is activated later, photos can move back to R2 (swap the KV calls in
+`src/upload.ts` and `src/public.ts` for R2 calls and restore the
+`r2_buckets` binding in `wrangler.toml`).
 
-```bash
-npx wrangler r2 bucket create qr-menu-maker-photos
-```
+KV free-tier limits (per account): 1 GB storage, 1,000 writes/day,
+100,000 reads/day — plenty for menu photos. Note KV reads are
+**eventually consistent**: a photo uploaded a moment ago can take a few
+seconds to appear on every edge.
 
 ### 6. Apply the database migrations
 
@@ -175,7 +183,7 @@ allows 10ms of CPU per request and a login can take 10–20ms, so take
 ## Where things live
 
 ```
-wrangler.toml            Bindings (D1 + R2), static assets from ./public
+wrangler.toml            Bindings (D1 + KV), static assets from ./public
 migrations/0001_init.sql D1 schema (users, sessions, restaurants,
                          categories, items, prices + support tables)
 public/styles.css        Mobile-first CSS
@@ -194,14 +202,14 @@ src/admin.ts             Admin: owners, restaurants, plan flips, setup links
 src/owner.ts             Owner dashboard: profile, categories, items,
                          prices, photos, QR download/print
 src/public.ts            Landing page, public menu, QR SVG, photo serving
-src/upload.ts            R2 photo upload validation (JPG/WebP/PNG, max 2 MB)
+src/upload.ts            KV photo upload validation (JPG/WebP/PNG, max 2 MB)
 ```
 
 ## Useful commands
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm run dev         # local dev server with local D1 + R2
+npm run dev         # local dev server with local D1 + KV
 npm run deploy      # deploy to Cloudflare
 ```
 
@@ -215,5 +223,7 @@ npm run deploy      # deploy to Cloudflare
   works once. The admin can generate a new one from the Admin page.
 - **Login says "Too many failed attempts"** — wait 15 minutes, or clear
   the `login_attempts` rows in D1.
-- **Photos do not load** — check the R2 bucket name in `wrangler.toml`
-  and that the bucket exists in the same account.
+- **Photos do not load** — check the KV namespace ID in
+  `wrangler.toml` and that the namespace exists in the same account.
+  Also wait a few seconds: KV reads are eventually consistent, so a
+  photo uploaded a moment ago may not show everywhere at once.
