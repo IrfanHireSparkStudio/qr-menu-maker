@@ -17,7 +17,7 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "qr-menu-maker-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "e36f9cdf-af11-4580-ba70-fba4a0bf6988"
 
 # R2 bucket for menu photos (item photos, restaurant logos). Create it first:
 #   wrangler r2 bucket create qr-menu-maker-photos
