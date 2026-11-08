@@ -1,0 +1,31 @@
+# QR Menu Maker — Cloudflare Workers (not Pages)
+# Deploy: see README.md
+
+name = "qr-menu-maker"
+main = "src/index.ts"
+compatibility_date = "2026-11-08"
+
+# Static assets (CSS + client JS) served from ./public.
+# A request matching a file in ./public is served directly;
+# every other request falls through to the Worker.
+[assets]
+directory = "./public"
+
+# D1 database. Create it first:
+#   wrangler d1 create qr-menu-maker-db
+# then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "qr-menu-maker-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# R2 bucket for menu photos (item photos, restaurant logos). Create it first:
+#   wrangler r2 bucket create qr-menu-maker-photos
+[[r2_buckets]]
+binding = "MENU_PHOTOS"
+bucket_name = "qr-menu-maker-photos"
+
+[vars]
+# Public Cloudflare Turnstile site key. This is NOT a secret and is safe to commit.
+# Leave empty to run without Turnstile (the secret key is set via `wrangler secret put`).
+TURNSTILE_SITE_KEY = ""
